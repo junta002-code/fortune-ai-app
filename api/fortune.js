@@ -267,7 +267,7 @@ function sleep(ms) {
 
 async function callGeminiWithRetry(apiKey, prompt) {
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
-  const delays = [0, 2000, 5000];
+  const delays = [0, 3000, 8000];
 
   for (let attempt = 0; attempt < delays.length; attempt++) {
     if (delays[attempt] > 0) {
@@ -359,12 +359,15 @@ export default async function handler(req, res) {
   const bloodTraits = bloodMode === "逆傾向" ? bloodProfile.inverse : bloodProfile.base;
 
   try {
-    const firstPrompt = [
+    // 3段階の占いロジックは維持しつつ、Geminiへの通信は1回にまとめる。
+    // これにより、1回の占いで3回連続してGeminiを呼ぶことによる503混雑リスクを下げる。
+    const combinedPrompt = [
       "あなたはAIトリプル占いの占い師です。",
-      "今日の運勢文と、ラッキーカラー5候補、ラッキーアイテム5候補を選んでください。",
-      "カラーとアイテムは必ず提示された候補リストから5つずつ選び、重複させないでください。",
-      "星座・日付・太陽・月の状態を材料に、あなたの判断で選んでください。",
-      "血液型と直感マークは第1段階では判断材料にしません。",
+      "以下の3段階を、必ずこの順番で内部的に行ってください。",
+      "第1段階：星座・日付・太陽・月の状態を材料に、今日の運勢文と、提示された16色からラッキーカラー5候補、提示された16個からラッキーアイテム5候補を選ぶ。",
+      "第2段階：その5候補だけを対象に、指定された血液型と今回の傾向を材料に、カラー3候補とアイテム3候補へ絞る。",
+      "第3段階：その3候補だけを対象に、指定された直感マークの性質を材料に、最終的なカラー1つとアイテム1つを選ぶ。",
+      "第2段階と第3段階では、提示された候補以外を絶対に追加しないでください。",
       "運勢文では星座名を直接書かず、1〜2文、70〜100文字程度の自然な日本語にしてください。",
       "JSONだけを返してください。",
       "今日：" + today,
@@ -375,61 +378,70 @@ export default async function handler(req, res) {
       "太陽と星座中心の角距離：" + sky.sunDistance + "度",
       "月と星座中心の角距離：" + sky.moonDistance + "度",
       "太陽と月の角距離：" + sky.sunMoonDistance + "度",
+      "血液型：" + bloodType,
+      "今回の血液型傾向：" + bloodMode,
+      "血液型の判断材料：" + bloodTraits.join("・"),
+      "直感マーク：" + mark,
+      "直感マークの性質：" + markTraits.join("・"),
       "カラー候補リスト：" + LUCKY_COLORS.map(x => x.name).join("、"),
       "アイテム候補リスト：" + LUCKY_ITEMS.map(x => x.name).join("、"),
       JSON.stringify({
         zodiacFortune: "今日の運勢の文章",
         colorFive: ["色1","色2","色3","色4","色5"],
-        itemFive: ["アイテム1","アイテム2","アイテム3","アイテム4","アイテム5"]
+        itemFive: ["アイテム1","アイテム2","アイテム3","アイテム4","アイテム5"],
+        colorThree: ["色1","色2","色3"],
+        itemThree: ["アイテム1","アイテム2","アイテム3"],
+        luckyColor: "最終的に選んだ色",
+        luckyItem: "最終的に選んだアイテム"
       })
     ].join("\n");
 
-    const first = await askGemini(apiKey, firstPrompt);
-    const colorFive = Array.isArray(first.colorFive) ? first.colorFive.map(name => LUCKY_COLORS.find(x => x.name === name)).filter(Boolean) : [];
-    const itemFive = Array.isArray(first.itemFive) ? first.itemFive.map(name => LUCKY_ITEMS.find(x => x.name === name)).filter(Boolean) : [];
+    const result = await askGemini(apiKey, combinedPrompt);
 
-    if (colorFive.length !== 5 || itemFive.length !== 5) {
+    const colorFiveNames = Array.isArray(result.colorFive) ? result.colorFive : [];
+    const itemFiveNames = Array.isArray(result.itemFive) ? result.itemFive : [];
+    const colorThreeNames = Array.isArray(result.colorThree) ? result.colorThree : [];
+    const itemThreeNames = Array.isArray(result.itemThree) ? result.itemThree : [];
+
+    const colorFive = colorFiveNames.map(name => LUCKY_COLORS.find(x => x.name === name)).filter(Boolean);
+    const itemFive = itemFiveNames.map(name => LUCKY_ITEMS.find(x => x.name === name)).filter(Boolean);
+
+    if (
+      colorFive.length !== 5 ||
+      itemFive.length !== 5 ||
+      new Set(colorFiveNames).size !== 5 ||
+      new Set(itemFiveNames).size !== 5
+    ) {
       return res.status(502).json({ error: "Geminiが5候補を正しく選べませんでした。" });
     }
 
-    const colorScored = assignLuckyScores(colorFive, hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|color|" + Date.now()));
-    const itemScored = assignLuckyScores(itemFive, hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|item|" + Date.now()));
+    const colorScored = assignLuckyScores(
+      colorFive,
+      hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|color|" + Date.now())
+    );
+    const itemScored = assignLuckyScores(
+      itemFive,
+      hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|item|" + Date.now())
+    );
 
-    const secondPrompt = [
-      "AIトリプル占いの第2段階です。",
-      "5候補から、指定された血液型の傾向に合うものを3つずつ選んでください。",
-      "提示された候補以外は使わないでください。順位は付けず、3つを選ぶだけにしてください。",
-      "血液型：" + bloodType,
-      "今回の傾向：" + bloodMode,
-      "判断材料：" + bloodTraits.join("・"),
-      "カラー5候補：" + colorScored.map(x => x.name).join("、"),
-      "アイテム5候補：" + itemScored.map(x => x.name).join("、"),
-      JSON.stringify({ colorThree: ["色1","色2","色3"], itemThree: ["アイテム1","アイテム2","アイテム3"] })
-    ].join("\n");
+    const colorThree = colorThreeNames
+      .map(name => colorScored.find(x => x.name === name))
+      .filter(Boolean);
+    const itemThree = itemThreeNames
+      .map(name => itemScored.find(x => x.name === name))
+      .filter(Boolean);
 
-    const second = await askGemini(apiKey, secondPrompt);
-    const colorThree = Array.isArray(second.colorThree) ? second.colorThree.map(name => colorScored.find(x => x.name === name)).filter(Boolean) : [];
-    const itemThree = Array.isArray(second.itemThree) ? second.itemThree.map(name => itemScored.find(x => x.name === name)).filter(Boolean) : [];
-
-    if (colorThree.length !== 3 || itemThree.length !== 3) {
+    if (
+      colorThree.length !== 3 ||
+      itemThree.length !== 3 ||
+      new Set(colorThreeNames).size !== 3 ||
+      new Set(itemThreeNames).size !== 3
+    ) {
       return res.status(502).json({ error: "Geminiが3候補を正しく選べませんでした。" });
     }
 
-    const thirdPrompt = [
-      "AIトリプル占いの最終選定です。",
-      "提示された3候補から、直感マークの性質を材料にカラー1つ、アイテム1つを選んでください。",
-      "必ず提示された3候補の中から選び、新しい候補を追加しないでください。",
-      "点数は判断材料にしないでください。",
-      "直感マーク：" + mark,
-      "直感マークの性質：" + markTraits.join("・"),
-      "カラー3候補：" + colorThree.map(x => x.name).join("、"),
-      "アイテム3候補：" + itemThree.map(x => x.name).join("、"),
-      JSON.stringify({ luckyColor: "選んだ色", luckyItem: "選んだアイテム" })
-    ].join("\n");
-
-    const third = await askGemini(apiKey, thirdPrompt);
-    const luckyColor = colorThree.find(x => x.name === third.luckyColor);
-    const luckyItem = itemThree.find(x => x.name === third.luckyItem);
+    const luckyColor = colorThree.find(x => x.name === result.luckyColor);
+    const luckyItem = itemThree.find(x => x.name === result.luckyItem);
 
     if (!luckyColor || !luckyItem) {
       return res.status(502).json({ error: "Geminiが最終選択を正しく返せませんでした。" });
@@ -439,25 +451,35 @@ export default async function handler(req, res) {
     const markPoints = markScores[mark];
     const colorPoints = luckyColor.luckyScore;
     const itemPoints = luckyItem.luckyScore;
-    const totalScore = Math.max(1, Math.min(100, sky.zodiacPoints + colorPoints + itemPoints + markPoints));
+    const totalScore = Math.max(
+      1,
+      Math.min(100, sky.zodiacPoints + colorPoints + itemPoints + markPoints)
+    );
 
     return res.status(200).json({
       ok: true,
       fortune: {
-        zodiacFortune: typeof first.zodiacFortune === "string" ? first.zodiacFortune : "",
+        zodiacFortune: typeof result.zodiacFortune === "string" ? result.zodiacFortune : "",
         luckyColor: luckyColor.name,
         luckyItem: luckyItem.name,
         markGrade: "",
         totalScore
       },
-      zodiacSky: { ...sky, bloodMode, colorPoints, itemPoints, markPoints }
+      zodiacSky: {
+        ...sky,
+        bloodMode,
+        colorPoints,
+        itemPoints,
+        markPoints
+      }
     });
 
   } catch (error) {
     console.error("Fortune server error:", error);
     return res.status(500).json({
       error: "VercelからGeminiへの通信処理でエラーが発生しました。",
-      detail: error.message
+      detail: error.message,
+      geminiStatus: error.geminiStatus || undefined
     });
   }
 }
