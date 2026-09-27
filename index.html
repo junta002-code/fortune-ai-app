@@ -81,7 +81,6 @@
         <p id="zodiacResult"></p>
         <p><span class="result-label">【ラッキーカラー】</span><span class="result-text" id="luckyColor"></span></p>
         <p><span class="result-label">【ラッキーアイテム】</span><span class="result-text" id="luckyItem"></span></p>
-        <p><span class="result-label">【直感マーク】</span><span class="result-text" id="markGrade"></span></p>
         <div class="score" id="totalScore"></div>
       </div>
     </section>
@@ -142,7 +141,6 @@
       }
       document.getElementById("luckyColor").textContent = fortune.luckyColor || "";
       document.getElementById("luckyItem").textContent = fortune.luckyItem || "";
-      document.getElementById("markGrade").textContent = fortune.markGrade || "";
       document.getElementById("totalScore").innerHTML = '<span class="result-label">【総合運点】</span><span class="result-text">' + (Number.isInteger(fortune.totalScore) ? fortune.totalScore : "—") + "点</span>";
       result.style.display = "block";
     } catch (error) {
