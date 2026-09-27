@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <radialGradient id="bg" cx="50%" cy="42%" r="70%"><stop offset="0" stop-color="#4d2a86"/><stop offset=".55" stop-color="#21194d"/><stop offset="1" stop-color="#100c25"/></radialGradient>
+ <radialGradient id="orb" cx="42%" cy="35%" r="65%"><stop offset="0" stop-color="#ffffff"/><stop offset=".18" stop-color="#b9f3ff"/><stop offset=".45" stop-color="#8b5cf6"/><stop offset=".72" stop-color="#31206d"/><stop offset="1" stop-color="#120c38"/></radialGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0a8"/><stop offset=".35" stop-color="#d89a32"/><stop offset=".7" stop-color="#7a3b14"/><stop offset="1" stop-color="#ffd96a"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="96" fill="url(#bg)"/>
+<circle cx="256" cy="210" r="176" fill="none" stroke="url(#gold)" stroke-width="8" opacity=".9"/>
+<g fill="none" stroke="#f6c96b" stroke-width="4" opacity=".7">
+ <path d="M256 34v42M256 344v42M80 210h42M390 210h42"/>
+</g>
+<g fill="#f8d67a" font-family="serif" font-size="34" text-anchor="middle">
+ <text x="256" y="62">♈</text><text x="375" y="115">♊</text><text x="405" y="260">♌</text>
+ <text x="137" y="115">♓</text><text x="107" y="260">♏</text>
+</g>
+<circle cx="256" cy="210" r="126" fill="url(#orb)" stroke="#efe5ff" stroke-width="7" filter="url(#glow)"/>
+<path d="M178 168c35-53 92-68 143-35" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round" opacity=".65"/>
+<g fill="#fff" opacity=".9"><circle cx="214" cy="215" r="4"/><circle cx="278" cy="155" r="5"/><circle cx="312" cy="235" r="4"/><circle cx="240" cy="278" r="3"/></g>
+<path d="M154 326 Q256 285 358 326 L342 372 Q256 350 170 372 Z" fill="#241326" stroke="url(#gold)" stroke-width="7"/>
+<path d="M170 372 Q256 350 342 372 L366 405 Q256 380 146 405 Z" fill="#170d24" stroke="url(#gold)" stroke-width="7"/>
+<circle cx="256" cy="360" r="23" fill="#7d45d9" stroke="#ffd96a" stroke-width="5"/>
+<text x="256" y="466" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="38" fill="#fff1b0">AIトリプル占い</text>
+</svg>
