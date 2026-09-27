@@ -28,7 +28,7 @@ document.getElementById("test").addEventListener("click", async () => {
   try{
     const response=await fetch("/api/gemini-test");
     const data=await response.json().catch(()=>({}));
-    result.textContent=data.message || data.error || "応答を受け取りました。";
+    result.textContent=data.message || (data.error ? data.error + (data.geminiStatus ? "\n\nHTTP " + data.geminiStatus : "") + (data.detail ? "\n\n" + data.detail : "") : "応答を受け取りました。");
   }catch(error){
     result.textContent="通信エラー: "+error.message;
   }
