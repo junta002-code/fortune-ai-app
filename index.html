@@ -12,7 +12,8 @@
     .card{background:#fffdfb;border-radius:22px;padding:22px 20px 24px;box-shadow:0 12px 38px rgba(0,0,0,.28)}
     h1{margin:0;text-align:center;font-size:27px;letter-spacing:.02em}
     .date{margin:8px 0 4px;text-align:center;font-size:15px;font-weight:700;color:#6b57c9}
-    .lead{margin:10px 0 20px;text-align:center;line-height:1.4;font-size:13px;white-space:nowrap;color:#5b566b}
+    .lead{margin:10px 0 6px;text-align:center;line-height:1.4;font-size:13px;white-space:nowrap;color:#5b566b}
+    .daily-limit{margin:0 0 20px;text-align:center;font-size:13px;font-weight:800;color:#6b57c9}
     .field{margin-top:14px}
     label{display:block;margin-bottom:7px;font-size:14px;font-weight:700}
     .select-row{display:flex;align-items:center;gap:10px}
@@ -40,6 +41,7 @@
       <h1>🔮 AIトリプル占い</h1>
       <div class="date" id="today"></div>
       <p class="lead">星座・血液型・直感マークで占います。</p>
+      <p class="daily-limit">🔮 本日のAI占いは20名様限定！</p>
 
       <div class="field">
         <label for="zodiac">星座</label>
@@ -147,15 +149,13 @@
       const data = await response.json();
 
       if (!response.ok || !data.ok) {
+        if (data.dailyFreeTierQuotaExceeded) {
+          throw new Error("本日のAI占い上限に達しました。\nまた明日トライしてみてください！🙇");
+        }
         if (data.geminiStatus === 503) {
           throw new Error("只今占い混雑中…\nしばらくしてからリトライしてください！");
         }
-        const detail = [
-          data.error || "占い結果を取得できませんでした。",
-          data.geminiStatus ? "Geminiステータス: " + data.geminiStatus : "",
-          data.detail ? "詳細: " + data.detail : ""
-        ].filter(Boolean).join("\n");
-        throw new Error(detail);
+        throw new Error(data.error || "占い結果を取得できませんでした。しばらくしてからもう一度お試しください。");
       }
 
       const fortune = data.fortune || {};
