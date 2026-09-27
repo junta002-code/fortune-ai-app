@@ -136,7 +136,7 @@
       }
 
       const fortune = data.fortune || {};
-      document.getElementById("zodiacResult").innerHTML = fortune.zodiacFortune ? '<span class="result-label">【今日の運勢】</span><span class="result-text"></span>' : "";
+      document.getElementById("zodiacResult").innerHTML = fortune.zodiacFortune ? '<span class="result-label">【運勢】</span><span class="result-text"></span>' : "";
       if (fortune.zodiacFortune) {
         document.getElementById("zodiacResult").querySelector(".result-text").textContent = fortune.zodiacFortune;
       }
