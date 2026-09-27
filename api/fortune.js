@@ -276,6 +276,16 @@ async function askGemini(apiKey, prompt) {
       error.dailyFreeTierQuotaExceeded =
         response.status === 429 &&
         bodyText.includes("generate_content_free_tier_requests");
+
+      // Paid Tierの前払い残高が尽きた場合はHTTP 402。
+      // 429はRPM/TPM/RPDなど別のレート制限でも発生するため、混同しない。
+      error.prepayCreditDepleted =
+        response.status === 402 &&
+        (
+          bodyText.includes("Prepay credit balance") ||
+          bodyText.includes("prepayment credits") ||
+          bodyText.includes("prepay")
+        );
     } catch {
       error.geminiErrorCode = null;
       error.geminiErrorStatus = null;
@@ -284,6 +294,13 @@ async function askGemini(apiKey, prompt) {
       error.dailyFreeTierQuotaExceeded =
         response.status === 429 &&
         bodyText.includes("generate_content_free_tier_requests");
+      error.prepayCreditDepleted =
+        response.status === 402 &&
+        (
+          bodyText.includes("Prepay credit balance") ||
+          bodyText.includes("prepayment credits") ||
+          bodyText.includes("prepay")
+        );
     }
 
     throw error;
@@ -506,6 +523,13 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Fortune server error:", error);
+
+    if (error.prepayCreditDepleted) {
+      return res.status(402).json({
+        error: "AI占いの利用上限に達しました。",
+        prepayCreditDepleted: true
+      });
+    }
 
     if (error.dailyFreeTierQuotaExceeded) {
       return res.status(429).json({
