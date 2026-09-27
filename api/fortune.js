@@ -104,26 +104,21 @@ function getSunMoonLongitude(date) {
 
 // 太陽・月と選択星座の位置関係だけで内部的な傾向を作る。
 // これは占いのルールであり、科学的な因果関係を示すものではない。
-function aspectScore(distance) {
-  const aspects = [
-    { angle: 0, score: 12 },
-    { angle: 60, score: 8 },
-    { angle: 90, score: -7 },
-    { angle: 120, score: 8 },
-    { angle: 180, score: -10 }
+function interpolateAspectScore(distance) {
+  const points = [
+    { angle: 0, score: 80 }, { angle: 30, score: 65 }, { angle: 60, score: 90 },
+    { angle: 90, score: 40 }, { angle: 120, score: 100 }, { angle: 150, score: 35 },
+    { angle: 180, score: 25 }
   ];
-
-  let best = { score: 0, difference: Infinity };
-
-  for (const aspect of aspects) {
-    const difference = Math.abs(distance - aspect.angle);
-    if (difference < best.difference) {
-      best = { score: aspect.score, difference };
+  const d = Math.min(180, Math.max(0, distance));
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    if (d >= a.angle && d <= b.angle) {
+      const ratio = (d - a.angle) / (b.angle - a.angle);
+      return a.score + (b.score - a.score) * ratio;
     }
   }
-
-  if (best.difference >= 30) return 0;
-  return best.score * (1 - best.difference / 30);
+  return 25;
 }
 
 function buildZodiacSkyData(zodiac, date) {
@@ -134,9 +129,12 @@ function buildZodiacSkyData(zodiac, date) {
   const sunDistance = angularDistance(sunLongitude, signCenter);
   const moonDistance = angularDistance(moonLongitude, signCenter);
 
-  const sunScore = aspectScore(sunDistance);
-  const moonScore = aspectScore(moonDistance);
-  const skyScore = Math.round(sunScore * 0.45 + moonScore * 0.55);
+  const sunScore = interpolateAspectScore(sunDistance);
+  const moonScore = interpolateAspectScore(moonDistance);
+  const sunMoonDistance = angularDistance(sunLongitude, moonLongitude);
+  const sunMoonScore = interpolateAspectScore(sunMoonDistance);
+  const skyScore = Math.round(sunScore * 0.40 + moonScore * 0.35 + sunMoonScore * 0.25);
+  const zodiacPoints = Math.max(1, Math.min(30, Math.round(skyScore * 0.30)));
 
   let tendency;
   if (skyScore >= 8) tendency = "追い風";
@@ -152,7 +150,12 @@ function buildZodiacSkyData(zodiac, date) {
     zodiacCenterLongitude: Number(signCenter.toFixed(2)),
     sunDistance: Number(sunDistance.toFixed(2)),
     moonDistance: Number(moonDistance.toFixed(2)),
+    sunMoonDistance: Number(sunMoonDistance.toFixed(2)),
+    sunScore: Number(sunScore.toFixed(1)),
+    moonScore: Number(moonScore.toFixed(1)),
+    sunMoonScore: Number(sunMoonScore.toFixed(1)),
     skyScore,
+    zodiacPoints,
     tendency
   };
 }
@@ -218,6 +221,44 @@ function buildLuckyCandidates(dateKey, bloodType) {
   const colors = pickDailyFive(LUCKY_COLORS, dateKey, bloodType, "color");
   const items = pickDailyFive(LUCKY_ITEMS, dateKey, bloodType, "item");
   return { colors, items, colorNarrowed: narrowByBlood(colors, bloodType), itemNarrowed: narrowByBlood(items, bloodType) };
+}
+
+function pickRandomBloodMode() {
+  return Math.random() < 0.20 ? "逆傾向" : "基本傾向";
+}
+
+function assignLuckyScores(items, seed) {
+  const scores = seededShuffle([10, 8, 6, 4, 2], seed);
+  return items.map((item, index) => ({ ...item, luckyScore: scores[index] }));
+}
+
+function buildDailyMarkScores(dateKey) {
+  const keys = ["spade", "diamond", "heart", "club", "star"];
+  const scores = seededShuffle([50, 40, 30, 20, 10], hashSeed(dateKey + "|daily-mark"));
+  return Object.fromEntries(keys.map((key, index) => [key, scores[index]]));
+}
+
+function parseGeminiJson(bodyText) {
+  let data;
+  try { data = JSON.parse(bodyText); }
+  catch { throw new Error("Gemini APIからJSONとして解釈できない応答が返りました。"); }
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  if (!text) throw new Error("Geminiから占い結果を取得できませんでした。");
+  const fence = String.fromCharCode(96, 96, 96);
+  const cleaned = text.trim().replaceAll(fence + "json", "").replaceAll(fence, "").trim();
+  try { return JSON.parse(cleaned); }
+  catch { throw new Error("Geminiの占い結果をJSONとして解釈できませんでした。"); }
+}
+
+async function askGemini(apiKey, prompt) {
+  const { response, bodyText } = await callGeminiWithRetry(apiKey, prompt);
+  if (!response.ok) {
+    const error = new Error("Gemini APIが占い結果の生成に失敗しました。");
+    error.geminiStatus = response.status;
+    error.detail = bodyText;
+    throw error;
+  }
+  return parseGeminiJson(bodyText);
 }
 
 function sleep(ms) {
@@ -306,132 +347,112 @@ export default async function handler(req, res) {
     hour12: false
   });
 
-  const sky = buildZodiacSkyData(zodiac, now);
 
+  const sky = buildZodiacSkyData(zodiac, now);
   const dateKey = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit"
   }).format(now);
-  const lucky = buildLuckyCandidates(dateKey, bloodType);
+
   const markTraits = MARK_TRAITS[mark] || MARK_TRAITS.star;
-
-  const prompt = `
-あなたは「AIトリプル占い」の占い師です。
-
-今回は、「今日の運勢」と「ラッキーカラー」「ラッキーアイテム」を作ってください。
-星座部分は太陽・月・選択された星座の3要素を使います。
-ラッキーカラーとラッキーアイテムは、プログラム側ですでに候補を絞っています。
-
-重要：
-- 天体の位置計算はプログラム側ですでに行っています。
-- 下記の数値と候補を材料として使ってください。
-- 「今日の運勢」の文章では、血液型と直感マークを直接説明しないでください。
-- 結果文章の中で選択した星座名を直接書かないでください。
-- ラッキーカラーは提示された3候補から必ず1つ選んでください。
-- ラッキーアイテムも提示された3候補から必ず1つ選んでください。
-- 3候補は血液型の基本傾向80%・逆傾向20%を反映して、すでに作られています。再計算は不要です。
-- 最終選択では直感マークの傾向を参考にして3候補から1つ選んでください。
-- 直感マークは結果文章では説明せず、ラッキーの選択にだけ内部的に使ってください。
-- 「占星術では〜」などの説明も不要です。
-- 占いとして楽しく読める文章にしてください。
-- 1〜2文、70〜100文字程度の自然な日本語にしてください。
-- 「今日の運勢＝」という見出しはプログラム側で付けます。
-- 同じ星座でも月は時間とともに動くため、占う時刻によって少し違う表現になって構いません。
-
-今日：${today}
-日本時間：${japanTime}
-
-選択された星座：${sky.zodiac}
-選択された星座の中心黄経：${sky.zodiacCenterLongitude}度
-太陽の黄経：${sky.sunLongitude}度
-月の黄経：${sky.moonLongitude}度
-太陽と星座中心の角距離：${sky.sunDistance}度
-月と星座中心の角距離：${sky.moonDistance}度
-内部運勢傾向：${sky.tendency}
-内部運勢スコア：${sky.skyScore}
-
-血液型：${bloodType}
-直感マーク：${mark}
-直感マークの選択傾向：${markTraits.join("・")}
-
-今日のラッキーカラー5候補：
-${lucky.colors.map(x => x.name).join("、")}
-血液型で3候補に絞ったラッキーカラー：
-${lucky.colorNarrowed.candidates.map(x => x.name).join("、")}
-血液型の絞り込み：${lucky.colorNarrowed.mode}
-
-今日のラッキーアイテム5候補：
-${lucky.items.map(x => x.name).join("、")}
-血液型で3候補に絞ったラッキーアイテム：
-${lucky.itemNarrowed.candidates.map(x => x.name).join("、")}
-血液型の絞り込み：${lucky.itemNarrowed.mode}
-
-出力はJSONオブジェクトだけにしてください。
-Markdownのコードブロックや前後の説明文は付けないでください。
-
-{
-  "zodiacFortune": "今日の運勢の文章",
-  "luckyColor": "3候補から選んだ色",
-  "luckyItem": "3候補から選んだアイテム",
-  "markGrade": "",
-  "totalScore": 0
-}
-
-luckyColor と luckyItem は必ず提示された3候補の中から1つずつ選んでください。
-markGrade と totalScore は今回は空欄または0のままにしてください。
-`;
+  const bloodProfile = BLOOD_TRAITS[bloodType];
+  const bloodMode = pickRandomBloodMode();
+  const bloodTraits = bloodMode === "逆傾向" ? bloodProfile.inverse : bloodProfile.base;
 
   try {
-    const { response, bodyText } = await callGeminiWithRetry(apiKey, prompt);
+    const firstPrompt = [
+      "あなたはAIトリプル占いの占い師です。",
+      "今日の運勢文と、ラッキーカラー5候補、ラッキーアイテム5候補を選んでください。",
+      "カラーとアイテムは必ず提示された候補リストから5つずつ選び、重複させないでください。",
+      "星座・日付・太陽・月の状態を材料に、あなたの判断で選んでください。",
+      "血液型と直感マークは第1段階では判断材料にしません。",
+      "運勢文では星座名を直接書かず、1〜2文、70〜100文字程度の自然な日本語にしてください。",
+      "JSONだけを返してください。",
+      "今日：" + today,
+      "日本時間：" + japanTime,
+      "星座：" + zodiac,
+      "太陽黄経：" + sky.sunLongitude + "度",
+      "月黄経：" + sky.moonLongitude + "度",
+      "太陽と星座中心の角距離：" + sky.sunDistance + "度",
+      "月と星座中心の角距離：" + sky.moonDistance + "度",
+      "太陽と月の角距離：" + sky.sunMoonDistance + "度",
+      "カラー候補リスト：" + LUCKY_COLORS.map(x => x.name).join("、"),
+      "アイテム候補リスト：" + LUCKY_ITEMS.map(x => x.name).join("、"),
+      JSON.stringify({
+        zodiacFortune: "今日の運勢の文章",
+        colorFive: ["色1","色2","色3","色4","色5"],
+        itemFive: ["アイテム1","アイテム2","アイテム3","アイテム4","アイテム5"]
+      })
+    ].join("\n");
 
-    if (!response.ok) {
-      return res.status(502).json({
-        error: "Gemini APIが占い結果の生成に失敗しました。",
-        geminiStatus: response.status,
-        detail: bodyText
-      });
+    const first = await askGemini(apiKey, firstPrompt);
+    const colorFive = Array.isArray(first.colorFive) ? first.colorFive.map(name => LUCKY_COLORS.find(x => x.name === name)).filter(Boolean) : [];
+    const itemFive = Array.isArray(first.itemFive) ? first.itemFive.map(name => LUCKY_ITEMS.find(x => x.name === name)).filter(Boolean) : [];
+
+    if (colorFive.length !== 5 || itemFive.length !== 5) {
+      return res.status(502).json({ error: "Geminiが5候補を正しく選べませんでした。" });
     }
 
-    let data;
-    try {
-      data = JSON.parse(bodyText);
-    } catch {
-      return res.status(502).json({
-        error: "Gemini APIからJSONとして解釈できない応答が返りました。"
-      });
+    const colorScored = assignLuckyScores(colorFive, hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|color|" + Date.now()));
+    const itemScored = assignLuckyScores(itemFive, hashSeed(dateKey + "|" + zodiac + "|" + bloodType + "|item|" + Date.now()));
+
+    const secondPrompt = [
+      "AIトリプル占いの第2段階です。",
+      "5候補から、指定された血液型の傾向に合うものを3つずつ選んでください。",
+      "提示された候補以外は使わないでください。順位は付けず、3つを選ぶだけにしてください。",
+      "血液型：" + bloodType,
+      "今回の傾向：" + bloodMode,
+      "判断材料：" + bloodTraits.join("・"),
+      "カラー5候補：" + colorScored.map(x => x.name).join("、"),
+      "アイテム5候補：" + itemScored.map(x => x.name).join("、"),
+      JSON.stringify({ colorThree: ["色1","色2","色3"], itemThree: ["アイテム1","アイテム2","アイテム3"] })
+    ].join("\n");
+
+    const second = await askGemini(apiKey, secondPrompt);
+    const colorThree = Array.isArray(second.colorThree) ? second.colorThree.map(name => colorScored.find(x => x.name === name)).filter(Boolean) : [];
+    const itemThree = Array.isArray(second.itemThree) ? second.itemThree.map(name => itemScored.find(x => x.name === name)).filter(Boolean) : [];
+
+    if (colorThree.length !== 3 || itemThree.length !== 3) {
+      return res.status(502).json({ error: "Geminiが3候補を正しく選べませんでした。" });
     }
 
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const thirdPrompt = [
+      "AIトリプル占いの最終選定です。",
+      "提示された3候補から、直感マークの性質を材料にカラー1つ、アイテム1つを選んでください。",
+      "必ず提示された3候補の中から選び、新しい候補を追加しないでください。",
+      "点数は判断材料にしないでください。",
+      "直感マーク：" + mark,
+      "直感マークの性質：" + markTraits.join("・"),
+      "カラー3候補：" + colorThree.map(x => x.name).join("、"),
+      "アイテム3候補：" + itemThree.map(x => x.name).join("、"),
+      JSON.stringify({ luckyColor: "選んだ色", luckyItem: "選んだアイテム" })
+    ].join("\n");
 
-    if (!text) {
-      return res.status(502).json({
-        error: "Geminiから占い結果を取得できませんでした。",
-        raw: data
-      });
+    const third = await askGemini(apiKey, thirdPrompt);
+    const luckyColor = colorThree.find(x => x.name === third.luckyColor);
+    const luckyItem = itemThree.find(x => x.name === third.luckyItem);
+
+    if (!luckyColor || !luckyItem) {
+      return res.status(502).json({ error: "Geminiが最終選択を正しく返せませんでした。" });
     }
 
-    const cleanedText = text
-      .trim()
-      .replace(/^\`\`\`json\s*/i, "")
-      .replace(/^\`\`\`\s*/i, "")
-      .replace(/\s*\`\`\`$/i, "")
-      .trim();
-
-    let fortune;
-    try {
-      fortune = JSON.parse(cleanedText);
-    } catch {
-      return res.status(502).json({
-        error: "Geminiの占い結果をJSONとして解釈できませんでした。",
-        raw: text
-      });
-    }
+    const markScores = buildDailyMarkScores(dateKey);
+    const markPoints = markScores[mark];
+    const colorPoints = luckyColor.luckyScore;
+    const itemPoints = luckyItem.luckyScore;
+    const totalScore = Math.max(1, Math.min(100, sky.zodiacPoints + colorPoints + itemPoints + markPoints));
 
     return res.status(200).json({
       ok: true,
-      fortune,
-      zodiacSky: sky
+      fortune: {
+        zodiacFortune: typeof first.zodiacFortune === "string" ? first.zodiacFortune : "",
+        luckyColor: luckyColor.name,
+        luckyItem: luckyItem.name,
+        markGrade: "",
+        totalScore
+      },
+      zodiacSky: { ...sky, bloodMode, colorPoints, itemPoints, markPoints }
     });
+
   } catch (error) {
     console.error("Fortune server error:", error);
     return res.status(500).json({
