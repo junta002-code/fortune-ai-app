@@ -23,6 +23,8 @@
     .result{display:none;margin-top:22px;padding-top:18px;border-top:1px solid #e5e0eb}
     .result h2{margin:0 0 14px;text-align:center;font-size:20px}
     .result p{margin:10px 0;line-height:1.7}
+    .result-label{display:block;font-weight:800;margin-bottom:4px}
+    .result-text{display:block}
     .score{text-align:center;font-size:28px;font-weight:800;color:#6b57c9;margin-top:16px}
     .error{display:none;margin-top:16px;padding:12px;border-radius:10px;background:#fff0f0;color:#a33;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
   </style>
@@ -77,9 +79,9 @@
       <div class="result" id="result">
         <h2>今日のあなた</h2>
         <p id="zodiacResult"></p>
-        <p><strong>ラッキーカラー：</strong><span id="luckyColor"></span></p>
-        <p><strong>ラッキーアイテム：</strong><span id="luckyItem"></span></p>
-        <p><strong>直感マーク：</strong><span id="markGrade"></span></p>
+        <p><span class="result-label">【ラッキーカラー】</span><span class="result-text" id="luckyColor"></span></p>
+        <p><span class="result-label">【ラッキーアイテム】</span><span class="result-text" id="luckyItem"></span></p>
+        <p><span class="result-label">【直感マーク】</span><span class="result-text" id="markGrade"></span></p>
         <div class="score" id="totalScore"></div>
       </div>
     </section>
@@ -134,11 +136,14 @@
       }
 
       const fortune = data.fortune || {};
-      document.getElementById("zodiacResult").textContent = fortune.zodiacFortune ? "今日の運勢＝" + fortune.zodiacFortune : "";
+      document.getElementById("zodiacResult").innerHTML = fortune.zodiacFortune ? '<span class="result-label">【今日の運勢】</span><span class="result-text"></span>' : "";
+      if (fortune.zodiacFortune) {
+        document.getElementById("zodiacResult").querySelector(".result-text").textContent = fortune.zodiacFortune;
+      }
       document.getElementById("luckyColor").textContent = fortune.luckyColor || "";
       document.getElementById("luckyItem").textContent = fortune.luckyItem || "";
       document.getElementById("markGrade").textContent = fortune.markGrade || "";
-      document.getElementById("totalScore").textContent = (Number.isInteger(fortune.totalScore) ? fortune.totalScore : "—") + "点";
+      document.getElementById("totalScore").innerHTML = '<span class="result-label">【総合運点】</span><span class="result-text">' + (Number.isInteger(fortune.totalScore) ? fortune.totalScore : "—") + "点</span>";
       result.style.display = "block";
     } catch (error) {
       errorBox.textContent = error.message;
