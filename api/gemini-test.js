@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   if (!apiKey) {
     return res.status(500).json({
-      error: "GEMINI_API_KEY_TEST がVercelに設定されていません。"
+      error: "FORTUNE_AI_APP_GEMINI_API_KEY がVercelに設定されていません。"
     });
   }
 
