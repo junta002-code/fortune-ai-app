@@ -59,19 +59,6 @@
       color:#28243b;
       font-size:16px;
     }
-    .mark-preview{
-      width:48px;
-      height:48px;
-      flex:0 0 48px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:12px;
-      background:#f4f1fa;
-      font-size:30px;
-      line-height:1;
-      font-family:Arial,sans-serif;
-    }
     .fortune-button{
       width:100%;
       margin-top:22px;
@@ -148,7 +135,6 @@
             <option value="club">♣ クラブ</option>
             <option value="star">★ スター</option>
           </select>
-          <div class="mark-preview" id="markPreview">?</div>
         </div>
       </div>
 
@@ -165,22 +151,6 @@
     (today.getMonth()+1) + "月" +
     today.getDate() + "日（" +
     weekdays[today.getDay()] + "）";
-
-  const mark = document.getElementById("mark");
-  const preview = document.getElementById("markPreview");
-  const markData = {
-    spade:{symbol:"♠",color:"#222"},
-    diamond:{symbol:"♦",color:"#2878d8"},
-    heart:{symbol:"♥",color:"#e04444"},
-    club:{symbol:"♣",color:"#35a35a"},
-    star:{symbol:"★",color:"#f2a900"}
-  };
-
-  mark.addEventListener("change", () => {
-    const item = markData[mark.value];
-    preview.textContent = item ? item.symbol : "?";
-    preview.style.color = item ? item.color : "#8a8494";
-  });
 </script>
 </body>
 </html>
