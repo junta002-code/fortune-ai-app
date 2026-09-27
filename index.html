@@ -134,7 +134,7 @@
       }
 
       const fortune = data.fortune || {};
-      document.getElementById("zodiacResult").textContent = fortune.zodiacFortune || "";
+      document.getElementById("zodiacResult").textContent = fortune.zodiacFortune ? "今日の運勢＝" + fortune.zodiacFortune : "";
       document.getElementById("luckyColor").textContent = fortune.luckyColor || "";
       document.getElementById("luckyItem").textContent = fortune.luckyItem || "";
       document.getElementById("markGrade").textContent = fortune.markGrade || "";
