@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 血液型：${bloodType}
 直感マーク：${mark}
 
-次の形式のJSONだけを返してください。Markdownや説明文は付けないでください。
+JSONオブジェクトだけを返してください。Markdownのコードブロックや前後の説明文は付けないでください。
 
 {
   "zodiacFortune": "星座についての短い今日の運勢",
@@ -60,10 +60,7 @@ totalScoreは0から100までの整数にしてください。
           "x-goog-api-key": apiKey
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
+          contents: [{ parts: [{ text: prompt }] }]
         })
       }
     );
@@ -84,7 +81,7 @@ totalScoreは0から100までの整数にしてください。
       data = JSON.parse(bodyText);
     } catch {
       return res.status(502).json({
-        error: "GeminiからJSONとして解釈できない応答が返りました。"
+        error: "Gemini APIからJSONとして解釈できない応答が返りました。"
       });
     }
 
@@ -98,9 +95,16 @@ totalScoreは0から100までの整数にしてください。
       });
     }
 
+    const cleanedText = text
+      .trim()
+      .replace(/^\`\`\`json\s*/i, "")
+      .replace(/^\`\`\`\s*/i, "")
+      .replace(/\s*\`\`\`$/i, "")
+      .trim();
+
     let fortune;
     try {
-      fortune = JSON.parse(text);
+      fortune = JSON.parse(cleanedText);
     } catch {
       return res.status(502).json({
         error: "Geminiの占い結果をJSONとして解釈できませんでした。",
