@@ -256,6 +256,28 @@ async function askGemini(apiKey, prompt) {
     const error = new Error("Gemini APIが占い結果の生成に失敗しました。");
     error.geminiStatus = response.status;
     error.detail = bodyText;
+
+    // Geminiが返した429などの本当の原因を診断できるように、
+    // エラーJSONから主要項目だけを取り出して上位へ渡す。
+    try {
+      const parsed = JSON.parse(bodyText);
+      error.geminiErrorCode = parsed?.error?.code ?? null;
+      error.geminiErrorStatus = parsed?.error?.status ?? null;
+      error.geminiErrorMessage = parsed?.error?.message ?? null;
+
+      const reasons = Array.isArray(parsed?.error?.details)
+        ? parsed.error.details
+            .map(detail => detail?.reason)
+            .filter(Boolean)
+        : [];
+      error.geminiErrorReason = reasons.join(", ") || null;
+    } catch {
+      error.geminiErrorCode = null;
+      error.geminiErrorStatus = null;
+      error.geminiErrorMessage = bodyText;
+      error.geminiErrorReason = null;
+    }
+
     throw error;
   }
   return parseGeminiJson(bodyText);
@@ -478,8 +500,11 @@ export default async function handler(req, res) {
     console.error("Fortune server error:", error);
     return res.status(500).json({
       error: "VercelからGeminiへの通信処理でエラーが発生しました。",
-      detail: error.message,
-      geminiStatus: error.geminiStatus || undefined
+      detail: error.geminiErrorMessage || error.detail || error.message,
+      geminiStatus: error.geminiStatus || undefined,
+      geminiErrorCode: error.geminiErrorCode || undefined,
+      geminiErrorStatus: error.geminiErrorStatus || undefined,
+      geminiErrorReason: error.geminiErrorReason || undefined
     });
   }
 }
