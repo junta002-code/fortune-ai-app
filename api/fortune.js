@@ -1,5 +1,3 @@
-import * as Astronomy from "astronomy-engine";
-
 const ZODIAC = {
   "おひつじ座": 0,
   "おうし座": 30,
@@ -24,8 +22,88 @@ function angularDistance(a, b) {
   return Math.min(d, 360 - d);
 }
 
-// 今回は「太陽・月と選択した星座の位置関係」だけを使う
-// シンプルな占星術ルール。科学的な因果関係を示すものではない。
+function sinDeg(deg) {
+  return Math.sin(deg * Math.PI / 180);
+}
+
+function cosDeg(deg) {
+  return Math.cos(deg * Math.PI / 180);
+}
+
+function atan2Deg(y, x) {
+  return Math.atan2(y, x) * 180 / Math.PI;
+}
+
+// 外部の天文ライブラリを使わず、太陽・月の黄経を近似計算する。
+// 今回の占い用途では、日々の位置関係を安定して取得することを優先する。
+function getSunMoonLongitude(date) {
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const d = jd - 2451543.5;
+
+  // 太陽
+  const sunW = 282.9404 + 0.0000470935 * d;
+  const sunM = 356.0470 + 0.9856002585 * d;
+  const sunEcc = 0.016709 - 0.000000001151 * d;
+  const sunE = sunM + (180 / Math.PI) * sunEcc * sinDeg(sunM) * (1 + sunEcc * cosDeg(sunM));
+  const sunX = cosDeg(sunE) - sunEcc;
+  const sunY = Math.sqrt(1 - sunEcc * sunEcc) * sinDeg(sunE);
+  const sunV = atan2Deg(sunY, sunX);
+  const sunLongitude = normalizeAngle(sunV + sunW);
+
+  // 月の軌道要素
+  const moonN = 125.1228 - 0.0529538083 * d;
+  const moonI = 5.1454;
+  const moonW = 318.0634 + 0.1643573223 * d;
+  const moonA = 60.2666;
+  const moonEcc = 0.0549;
+  const moonM = 115.3654 + 13.0649929509 * d;
+
+  const sunLongitudeMean = normalizeAngle(sunM + sunW);
+  const moonLongitudeMean = normalizeAngle(moonM + moonW);
+
+  // 月の主要な摂動を簡易的に反映
+  const ev = 1.2739 * sinDeg(2 * (moonLongitudeMean - sunLongitudeMean) - moonM);
+  const ae = 0.1858 * sinDeg(sunM);
+  const a3 = 0.37 * sinDeg(sunM);
+  const moonM1 = moonM + ev - ae - a3;
+  const ec = 6.2886 * sinDeg(moonM1);
+  const a4 = 0.214 * sinDeg(2 * moonM1);
+  const a5 = 0.11 * sinDeg(moonLongitudeMean - sunLongitudeMean);
+  const moonM2 = moonM1 + ec - a4 + a5;
+
+  const moonE = moonM2 + (180 / Math.PI) * moonEcc * sinDeg(moonM2) * (1 + moonEcc * cosDeg(moonM2));
+  const moonR = moonA * (1 - moonEcc * cosDeg(moonE));
+  const moonV = atan2Deg(
+    Math.sqrt(1 - moonEcc * moonEcc) * sinDeg(moonE),
+    cosDeg(moonE) - moonEcc
+  );
+
+  const u = moonW + moonV;
+  const nRad = moonN * Math.PI / 180;
+  const iRad = moonI * Math.PI / 180;
+  const uRad = u * Math.PI / 180;
+
+  const xh = moonR * (Math.cos(nRad) * Math.cos(uRad) - Math.sin(nRad) * Math.sin(uRad) * Math.cos(iRad));
+  const yh = moonR * (Math.sin(nRad) * Math.cos(uRad) + Math.cos(nRad) * Math.sin(uRad) * Math.cos(iRad));
+
+  let moonLongitude = normalizeAngle(atan2Deg(yh, xh));
+
+  // 主要な追加補正
+  moonLongitude +=
+    -0.17 * sinDeg(moonN)
+    -0.34 * sinDeg(2 * moonLongitudeMean - 2 * sunLongitudeMean)
+    +0.66 * sinDeg(2 * moonLongitudeMean);
+
+  moonLongitude = normalizeAngle(moonLongitude);
+
+  return {
+    sunLongitude,
+    moonLongitude
+  };
+}
+
+// 太陽・月と選択星座の位置関係だけで内部的な傾向を作る。
+// これは占いのルールであり、科学的な因果関係を示すものではない。
 function aspectScore(distance) {
   const aspects = [
     { angle: 0, score: 12 },
@@ -44,45 +122,28 @@ function aspectScore(distance) {
     }
   }
 
-  // 30度以上離れている場合は、そのアスペクトの影響を使わない。
   if (best.difference >= 30) return 0;
-
-  // アスペクトの中心に近いほど影響を強くする。
   return best.score * (1 - best.difference / 30);
 }
 
 function buildZodiacSkyData(zodiac, date) {
   const signStart = ZODIAC[zodiac];
   const signCenter = normalizeAngle(signStart + 15);
-
-  // Astronomy Engine が現在時刻の太陽・月の黄経を計算する。
-  const sun = Astronomy.SunPosition(date);
-  const moon = Astronomy.EclipticGeoMoon(date);
-
-  const sunLongitude = normalizeAngle(sun.elon);
-  const moonLongitude = normalizeAngle(moon.lon);
+  const { sunLongitude, moonLongitude } = getSunMoonLongitude(date);
 
   const sunDistance = angularDistance(sunLongitude, signCenter);
   const moonDistance = angularDistance(moonLongitude, signCenter);
 
   const sunScore = aspectScore(sunDistance);
   const moonScore = aspectScore(moonDistance);
-
-  // 月は短時間で動くため、時間変化を感じやすいよう少し重くする。
   const skyScore = Math.round(sunScore * 0.45 + moonScore * 0.55);
 
   let tendency;
-  if (skyScore >= 8) {
-    tendency = "追い風";
-  } else if (skyScore >= 2) {
-    tendency = "やや追い風";
-  } else if (skyScore <= -8) {
-    tendency = "慎重";
-  } else if (skyScore <= -2) {
-    tendency = "やや慎重";
-  } else {
-    tendency = "穏やか";
-  }
+  if (skyScore >= 8) tendency = "追い風";
+  else if (skyScore >= 2) tendency = "やや追い風";
+  else if (skyScore <= -8) tendency = "慎重";
+  else if (skyScore <= -2) tendency = "やや慎重";
+  else tendency = "穏やか";
 
   return {
     zodiac,
@@ -145,18 +206,18 @@ export default async function handler(req, res) {
   const prompt = `
 あなたは「AIトリプル占い」の占い師です。
 
-今回は、星座占い部分を正式に実装するための第1段階です。
+今回は、星座占い部分を実装する第1段階です。
 「太陽・月・選択された星座」の3要素だけを使って、「今日の運勢」の文章を作ってください。
 
 重要：
-- 天文学的な位置計算はすでにプログラム側で行っています。
-- 下記の数値を信頼し、あなた自身で別の天体位置を推測・計算しないでください。
+- 天体の位置計算はプログラム側ですでに行っています。
+- 下記の数値を材料として使ってください。
 - 血液型と直感マークは、今回は星座占いの文章には一切使わないでください。
-- 結果文章の中で「おうし座だから」「さそり座なので」など、選択した星座名を直接書かないでください。
+- 結果文章の中で選択した星座名を直接書かないでください。
 - 「占星術では〜」などの説明も不要です。
-- 科学的な予言ではなく、占いとして楽しく読める文章にしてください。
+- 占いとして楽しく読める文章にしてください。
 - 1〜2文、70〜100文字程度の自然な日本語にしてください。
-- 「今日の運勢＝」という見出しはプログラム側で付けるので、文章には含めないでください。
+- 「今日の運勢＝」という見出しはプログラム側で付けます。
 - 同じ星座でも月は時間とともに動くため、占う時刻によって少し違う表現になって構いません。
 
 今日：${today}
@@ -168,7 +229,7 @@ export default async function handler(req, res) {
 月の黄経：${sky.moonLongitude}度
 太陽と星座中心の角距離：${sky.sunDistance}度
 月と星座中心の角距離：${sky.moonDistance}度
-太陽・月から算出した内部運勢傾向：${sky.tendency}
+内部運勢傾向：${sky.tendency}
 内部運勢スコア：${sky.skyScore}
 
 出力はJSONオブジェクトだけにしてください。
