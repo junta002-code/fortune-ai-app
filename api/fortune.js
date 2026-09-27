@@ -220,6 +220,48 @@ function buildLuckyCandidates(dateKey, bloodType) {
   return { colors, items, colorNarrowed: narrowByBlood(colors, bloodType), itemNarrowed: narrowByBlood(items, bloodType) };
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function callGeminiWithRetry(apiKey, prompt) {
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+  const delays = [0, 2000, 5000];
+
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) {
+      await sleep(delays[attempt]);
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+
+    const bodyText = await response.text();
+
+    if (response.ok) {
+      return { response, bodyText };
+    }
+
+    console.error("Fortune Gemini error:", response.status, bodyText);
+
+    // 503だけを自動再試行する。
+    // 400/401/403/429などは原因が別なので、無駄に待たせない。
+    if (response.status !== 503 || attempt === delays.length - 1) {
+      return { response, bodyText };
+    }
+  }
+
+  throw new Error("Gemini retry flow ended unexpectedly.");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "POST only" });
@@ -339,24 +381,9 @@ markGrade と totalScore は今回は空欄または0のままにしてくださ
 `;
 
   try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      }
-    );
-
-    const bodyText = await response.text();
+    const { response, bodyText } = await callGeminiWithRetry(apiKey, prompt);
 
     if (!response.ok) {
-      console.error("Fortune Gemini error:", response.status, bodyText);
       return res.status(502).json({
         error: "Gemini APIが占い結果の生成に失敗しました。",
         geminiStatus: response.status,
