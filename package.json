@@ -1,0 +1,7 @@
+{
+  "name": "fortune-ai-app",
+  "private": true,
+  "dependencies": {
+    "astronomy-engine": "2.1.19"
+  }
+}
