@@ -271,11 +271,19 @@ async function askGemini(apiKey, prompt) {
             .filter(Boolean)
         : [];
       error.geminiErrorReason = reasons.join(", ") || null;
+
+      // 無料枠の日次リクエスト上限に達した場合だけ、アプリ側で専用表示する。
+      error.dailyFreeTierQuotaExceeded =
+        response.status === 429 &&
+        bodyText.includes("generate_content_free_tier_requests");
     } catch {
       error.geminiErrorCode = null;
       error.geminiErrorStatus = null;
       error.geminiErrorMessage = bodyText;
       error.geminiErrorReason = null;
+      error.dailyFreeTierQuotaExceeded =
+        response.status === 429 &&
+        bodyText.includes("generate_content_free_tier_requests");
     }
 
     throw error;
@@ -498,13 +506,23 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Fortune server error:", error);
+
+    if (error.dailyFreeTierQuotaExceeded) {
+      return res.status(429).json({
+        error: "本日のAI占い上限に達しました。",
+        dailyFreeTierQuotaExceeded: true
+      });
+    }
+
+    if (error.geminiStatus === 503) {
+      return res.status(503).json({
+        error: "只今占い混雑中…",
+        geminiStatus: 503
+      });
+    }
+
     return res.status(500).json({
-      error: "VercelからGeminiへの通信処理でエラーが発生しました。",
-      detail: error.geminiErrorMessage || error.detail || error.message,
-      geminiStatus: error.geminiStatus || undefined,
-      geminiErrorCode: error.geminiErrorCode || undefined,
-      geminiErrorStatus: error.geminiErrorStatus || undefined,
-      geminiErrorReason: error.geminiErrorReason || undefined
+      error: "占い結果を取得できませんでした。しばらくしてからもう一度お試しください。"
     });
   }
 }
