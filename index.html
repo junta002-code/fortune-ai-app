@@ -7,75 +7,24 @@
   <title>AIトリプル占い</title>
   <style>
     *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:system-ui,-apple-system,"Yu Gothic",sans-serif;
-      background:linear-gradient(160deg,#17142B 0%,#211938 48%,#30214A 100%);
-      color:#28243b;
-      min-height:100vh;
-    }
+    body{margin:0;font-family:system-ui,-apple-system,"Yu Gothic",sans-serif;background:linear-gradient(160deg,#17142B 0%,#211938 48%,#30214A 100%);color:#28243b;min-height:100vh}
     .wrap{max-width:440px;margin:0 auto;padding:20px 16px 32px}
-    .card{
-      background:#fffdfb;
-      border-radius:22px;
-      padding:22px 20px 24px;
-      box-shadow:0 12px 38px rgba(0,0,0,.28);
-    }
-    h1{
-      margin:0;
-      text-align:center;
-      font-size:27px;
-      letter-spacing:.02em;
-    }
-    .date{
-      margin:8px 0 4px;
-      text-align:center;
-      font-size:15px;
-      font-weight:700;
-      color:#6b57c9;
-    }
-    .lead{
-      margin:10px 0 20px;
-      text-align:center;
-      line-height:1.65;
-      font-size:14px;
-      color:#5b566b;
-    }
+    .card{background:#fffdfb;border-radius:22px;padding:22px 20px 24px;box-shadow:0 12px 38px rgba(0,0,0,.28)}
+    h1{margin:0;text-align:center;font-size:27px;letter-spacing:.02em}
+    .date{margin:8px 0 4px;text-align:center;font-size:15px;font-weight:700;color:#6b57c9}
+    .lead{margin:10px 0 20px;text-align:center;line-height:1.65;font-size:14px;color:#5b566b}
     .field{margin-top:14px}
-    label{
-      display:block;
-      margin-bottom:7px;
-      font-size:14px;
-      font-weight:700;
-    }
+    label{display:block;margin-bottom:7px;font-size:14px;font-weight:700}
     .select-row{display:flex;align-items:center;gap:10px}
-    select{
-      flex:1;
-      min-width:0;
-      appearance:auto;
-      padding:13px 12px;
-      border:1px solid #d9d4e8;
-      border-radius:12px;
-      background:#fff;
-      color:#28243b;
-      font-size:16px;
-    }
-    .fortune-button{
-      width:100%;
-      margin-top:22px;
-      padding:15px;
-      border:0;
-      border-radius:13px;
-      background:#6b57c9;
-      color:#fff;
-      font-size:17px;
-      font-weight:800;
-      cursor:pointer;
-    }
-    .fortune-button:disabled{
-      background:#bdb7d0;
-      cursor:default;
-    }
+    select{flex:1;min-width:0;appearance:auto;padding:13px 12px;border:1px solid #d9d4e8;border-radius:12px;background:#fff;color:#28243b;font-size:16px}
+    .fortune-button{width:100%;margin-top:22px;padding:15px;border:0;border-radius:13px;background:#6b57c9;color:#fff;font-size:17px;font-weight:800;cursor:pointer}
+    .fortune-button:disabled{background:#bdb7d0;cursor:default}
+    .loading{display:none;margin-top:20px;text-align:center;color:#6b57c9;font-weight:700}
+    .result{display:none;margin-top:22px;padding-top:18px;border-top:1px solid #e5e0eb}
+    .result h2{margin:0 0 14px;text-align:center;font-size:20px}
+    .result p{margin:10px 0;line-height:1.7}
+    .score{text-align:center;font-size:28px;font-weight:800;color:#6b57c9;margin-top:16px}
+    .error{display:none;margin-top:16px;padding:12px;border-radius:10px;background:#fff0f0;color:#a33;font-size:13px;line-height:1.6}
   </style>
 </head>
 <body>
@@ -90,18 +39,9 @@
         <div class="select-row">
           <select id="zodiac">
             <option value="">選んでください</option>
-            <option>おひつじ座</option>
-            <option>おうし座</option>
-            <option>ふたご座</option>
-            <option>かに座</option>
-            <option>しし座</option>
-            <option>おとめ座</option>
-            <option>てんびん座</option>
-            <option>さそり座</option>
-            <option>いて座</option>
-            <option>やぎ座</option>
-            <option>みずがめ座</option>
-            <option>うお座</option>
+            <option>おひつじ座</option><option>おうし座</option><option>ふたご座</option><option>かに座</option>
+            <option>しし座</option><option>おとめ座</option><option>てんびん座</option><option>さそり座</option>
+            <option>いて座</option><option>やぎ座</option><option>みずがめ座</option><option>うお座</option>
           </select>
         </div>
       </div>
@@ -111,10 +51,7 @@
         <div class="select-row">
           <select id="blood">
             <option value="">選んでください</option>
-            <option>A型</option>
-            <option>B型</option>
-            <option>O型</option>
-            <option>AB型</option>
+            <option>A型</option><option>B型</option><option>O型</option><option>AB型</option>
           </select>
         </div>
       </div>
@@ -134,6 +71,17 @@
       </div>
 
       <button class="fortune-button" id="fortuneButton" disabled>占ってみる</button>
+      <div class="loading" id="loading">🔮 AI占い中……</div>
+      <div class="error" id="error"></div>
+
+      <div class="result" id="result">
+        <h2>今日のあなた</h2>
+        <p id="zodiacResult"></p>
+        <p><strong>ラッキーカラー：</strong><span id="luckyColor"></span></p>
+        <p><strong>ラッキーアイテム：</strong><span id="luckyItem"></span></p>
+        <p><strong>直感マーク：</strong><span id="markGrade"></span></p>
+        <div class="score" id="totalScore"></div>
+      </div>
     </section>
   </main>
 
@@ -141,10 +89,60 @@
   const today = new Date();
   const weekdays = ["日","月","火","水","木","金","土"];
   document.getElementById("today").textContent =
-    today.getFullYear() + "年" +
-    (today.getMonth()+1) + "月" +
-    today.getDate() + "日（" +
-    weekdays[today.getDay()] + "）";
+    today.getFullYear()+"年"+(today.getMonth()+1)+"月"+today.getDate()+"日（"+weekdays[today.getDay()]+"）";
+
+  const zodiac = document.getElementById("zodiac");
+  const blood = document.getElementById("blood");
+  const mark = document.getElementById("mark");
+  const button = document.getElementById("fortuneButton");
+  const loading = document.getElementById("loading");
+  const result = document.getElementById("result");
+  const errorBox = document.getElementById("error");
+
+  function updateButton(){
+    button.disabled = !(zodiac.value && blood.value && mark.value);
+  }
+
+  [zodiac,blood,mark].forEach(el => el.addEventListener("change", updateButton));
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    loading.style.display = "block";
+    result.style.display = "none";
+    errorBox.style.display = "none";
+
+    try {
+      const response = await fetch("/api/fortune", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          zodiac:zodiac.value,
+          bloodType:blood.value,
+          mark:mark.value
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "占い結果を取得できませんでした。");
+      }
+
+      const fortune = data.fortune || {};
+      document.getElementById("zodiacResult").textContent = fortune.zodiacFortune || "";
+      document.getElementById("luckyColor").textContent = fortune.luckyColor || "";
+      document.getElementById("luckyItem").textContent = fortune.luckyItem || "";
+      document.getElementById("markGrade").textContent = fortune.markGrade || "";
+      document.getElementById("totalScore").textContent = (Number.isInteger(fortune.totalScore) ? fortune.totalScore : "—") + "点";
+      result.style.display = "block";
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.style.display = "block";
+    } finally {
+      loading.style.display = "none";
+      updateButton();
+    }
+  });
 </script>
 </body>
 </html>
