@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "GET only" });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY_TEST;
+  const apiKey = process.env.FORTUNE_AI_APP_GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
