@@ -17,6 +17,10 @@
     label{display:block;margin-bottom:7px;font-size:14px;font-weight:700}
     .select-row{display:flex;align-items:center;gap:10px}
     select{flex:1;min-width:0;appearance:auto;padding:13px 12px;border:1px solid #d9d4e8;border-radius:12px;background:#fff;color:#28243b;font-size:16px}
+    .mark-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .mark-button{height:58px;border:1px solid #d9d4e8;border-radius:14px;background:#fff;font-size:34px;font-weight:800;line-height:1;cursor:pointer;transition:.15s}
+    .mark-button.selected{border:3px solid #6b57c9;box-shadow:0 0 0 3px rgba(107,87,201,.12);transform:translateY(-1px)}
+    .mark-spade{color:#171717}.mark-diamond{color:#2f68d8}.mark-heart{color:#df3c4f}.mark-club{color:#2f9b5a}.mark-star{color:#e39a18}
     .fortune-button{width:100%;margin-top:22px;padding:15px;border:0;border-radius:13px;background:#6b57c9;color:#fff;font-size:17px;font-weight:800;cursor:pointer}
     .fortune-button:disabled{background:#bdb7d0;cursor:default}
     .loading{display:none;margin-top:20px;text-align:center;color:#6b57c9;font-weight:700}
@@ -61,16 +65,14 @@
 
       <div class="field">
         <label for="mark">直感マーク</label>
-        <div class="select-row">
-          <select id="mark">
-            <option value="">選んでください</option>
-            <option value="spade">♠ スペード</option>
-            <option value="diamond">♦ ダイヤ</option>
-            <option value="heart">♥ ハート</option>
-            <option value="club">♣ クラブ</option>
-            <option value="star">★ スター</option>
-          </select>
+        <div class="mark-grid" id="markGrid" role="group" aria-label="直感マーク">
+          <button type="button" class="mark-button mark-spade" data-value="spade" aria-label="♠">♠</button>
+          <button type="button" class="mark-button mark-diamond" data-value="diamond" aria-label="♦">♦</button>
+          <button type="button" class="mark-button mark-heart" data-value="heart" aria-label="♥">♥</button>
+          <button type="button" class="mark-button mark-club" data-value="club" aria-label="♣">♣</button>
+          <button type="button" class="mark-button mark-star" data-value="star" aria-label="★">★</button>
         </div>
+        <input type="hidden" id="mark" value="">
       </div>
 
       <button class="fortune-button" id="fortuneButton" disabled>占ってみる</button>
@@ -96,6 +98,7 @@
   const zodiac = document.getElementById("zodiac");
   const blood = document.getElementById("blood");
   const mark = document.getElementById("mark");
+  const markButtons = [...document.querySelectorAll(".mark-button")];
   const button = document.getElementById("fortuneButton");
   const loading = document.getElementById("loading");
   const result = document.getElementById("result");
@@ -105,13 +108,30 @@
     button.disabled = !(zodiac.value && blood.value && mark.value);
   }
 
-  [zodiac,blood,mark].forEach(el => el.addEventListener("change", updateButton));
+  [zodiac,blood].forEach(el => el.addEventListener("change", updateButton));
+
+  markButtons.forEach(el => {
+    el.addEventListener("click", () => {
+      markButtons.forEach(btn => btn.classList.remove("selected"));
+      el.classList.add("selected");
+      mark.value = el.dataset.value;
+      updateButton();
+    });
+  });
 
   button.addEventListener("click", async () => {
     button.disabled = true;
     loading.style.display = "block";
+    loading.textContent = "🔮 AI占い中……";
     result.style.display = "none";
     errorBox.style.display = "none";
+
+    const stageTimer1 = setTimeout(() => {
+      loading.textContent = "🔮 もう少しお待ちください…";
+    }, 2000);
+    const stageTimer2 = setTimeout(() => {
+      loading.textContent = "🔮 ただいま最終確認中…";
+    }, 7000);
 
     try {
       const response = await fetch("/api/fortune", {
@@ -151,6 +171,8 @@
       errorBox.textContent = error.message;
       errorBox.style.display = "block";
     } finally {
+      clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
       loading.style.display = "none";
       updateButton();
     }
