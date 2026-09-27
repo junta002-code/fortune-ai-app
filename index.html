@@ -128,7 +128,7 @@
 
       if (!response.ok || !data.ok) {
         if (data.geminiStatus === 503) {
-          throw new Error("只今占い混雑中…しばらくしてリトライしてください！");
+          throw new Error("只今占い混雑中…\nしばらくしてからリトライしてください！");
         }
         const detail = [
           data.error || "占い結果を取得できませんでした。",
