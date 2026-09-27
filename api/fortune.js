@@ -157,6 +157,69 @@ function buildZodiacSkyData(zodiac, date) {
   };
 }
 
+const LUCKY_COLORS = [
+  { name: "青", traits: ["調和", "安定", "集中"] }, { name: "緑", traits: ["調和", "安定", "自然"] },
+  { name: "白", traits: ["調和", "安定", "純粋"] }, { name: "水色", traits: ["調和", "柔軟", "集中"] },
+  { name: "紺", traits: ["安定", "集中", "慎重"] }, { name: "赤", traits: ["行動", "刺激", "積極"] },
+  { name: "オレンジ", traits: ["行動", "交流", "刺激"] }, { name: "黄色", traits: ["交流", "刺激", "積極"] },
+  { name: "金色", traits: ["積極", "華やか", "刺激"] }, { name: "ピンク", traits: ["交流", "温かさ", "調和"] },
+  { name: "紫", traits: ["独自性", "柔軟", "華やか"] }, { name: "ラベンダー", traits: ["柔軟", "調和", "独自性"] },
+  { name: "銀色", traits: ["独自性", "慎重", "柔軟"] }, { name: "茶色", traits: ["安定", "自然", "慎重"] },
+  { name: "ベージュ", traits: ["安定", "調和", "自然"] }, { name: "ターコイズ", traits: ["柔軟", "独自性", "交流"] }
+];
+const LUCKY_ITEMS = [
+  { name: "ノート", traits: ["集中", "安定", "調和"] }, { name: "ペン", traits: ["集中", "行動", "独自性"] },
+  { name: "時計", traits: ["安定", "集中", "慎重"] }, { name: "財布", traits: ["安定", "積極", "華やか"] },
+  { name: "本", traits: ["集中", "独自性", "慎重"] }, { name: "鍵", traits: ["行動", "独自性", "慎重"] },
+  { name: "バッグ", traits: ["行動", "安定", "交流"] }, { name: "靴", traits: ["行動", "積極", "刺激"] },
+  { name: "帽子", traits: ["独自性", "刺激", "華やか"] }, { name: "イヤホン", traits: ["集中", "独自性", "柔軟"] },
+  { name: "ハンカチ", traits: ["調和", "温かさ", "安定"] }, { name: "マグカップ", traits: ["温かさ", "安定", "調和"] },
+  { name: "ペンダント", traits: ["華やか", "交流", "独自性"] }, { name: "傘", traits: ["慎重", "柔軟", "安定"] },
+  { name: "スマートフォン", traits: ["交流", "柔軟", "行動"] }, { name: "腕時計", traits: ["安定", "積極", "集中"] }
+];
+const BLOOD_TRAITS = {
+  "A型": { base: ["調和", "安定", "集中"], inverse: ["行動", "刺激", "独自性"] },
+  "B型": { base: ["行動", "独自性", "柔軟"], inverse: ["安定", "慎重", "調和"] },
+  "O型": { base: ["積極", "行動", "交流"], inverse: ["慎重", "安定", "集中"] },
+  "AB型": { base: ["独自性", "柔軟", "集中"], inverse: ["調和", "交流", "安定"] }
+};
+const MARK_TRAITS = {
+  spade: ["行動", "刺激", "積極"], diamond: ["華やか", "積極", "交流"],
+  heart: ["温かさ", "交流", "調和"], club: ["安定", "自然", "慎重"], star: ["独自性", "刺激", "華やか"]
+};
+function hashSeed(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function seededShuffle(items, seed) {
+  const arr = [...items]; let s = seed >>> 0;
+  for (let i = arr.length - 1; i > 0; i--) {
+    s = (Math.imul(s ^ (s >>> 16), 2246822519) + 3266489917) >>> 0;
+    const j = s % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function scoreTraitMatch(item, traits) {
+  return item.traits.reduce((sum, trait) => sum + (traits.includes(trait) ? 1 : 0), 0);
+}
+function pickDailyFive(pool, dateKey, bloodType, kind) {
+  return seededShuffle(pool, hashSeed(dateKey + "|" + bloodType + "|" + kind)).slice(0, 5);
+}
+function narrowByBlood(five, bloodType) {
+  const profile = BLOOD_TRAITS[bloodType];
+  const useInverse = Math.random() < 0.20;
+  const preferred = useInverse ? profile.inverse : profile.base;
+  const scored = five.map(item => ({ item, score: scoreTraitMatch(item, preferred), tie: Math.random() }))
+    .sort((a, b) => b.score - a.score || b.tie - a.tie);
+  return { candidates: scored.slice(0, 3).map(x => x.item), mode: useInverse ? "逆傾向" : "基本傾向" };
+}
+function buildLuckyCandidates(dateKey, bloodType) {
+  const colors = pickDailyFive(LUCKY_COLORS, dateKey, bloodType, "color");
+  const items = pickDailyFive(LUCKY_ITEMS, dateKey, bloodType, "item");
+  return { colors, items, colorNarrowed: narrowByBlood(colors, bloodType), itemNarrowed: narrowByBlood(items, bloodType) };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "POST only" });
@@ -203,17 +266,29 @@ export default async function handler(req, res) {
 
   const sky = buildZodiacSkyData(zodiac, now);
 
+  const dateKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(now);
+  const lucky = buildLuckyCandidates(dateKey, bloodType);
+  const markTraits = MARK_TRAITS[mark] || MARK_TRAITS.star;
+
   const prompt = `
 あなたは「AIトリプル占い」の占い師です。
 
-今回は、星座占い部分を実装する第1段階です。
-「太陽・月・選択された星座」の3要素だけを使って、「今日の運勢」の文章を作ってください。
+今回は、「今日の運勢」と「ラッキーカラー」「ラッキーアイテム」を作ってください。
+星座部分は太陽・月・選択された星座の3要素を使います。
+ラッキーカラーとラッキーアイテムは、プログラム側ですでに候補を絞っています。
 
 重要：
 - 天体の位置計算はプログラム側ですでに行っています。
-- 下記の数値を材料として使ってください。
-- 血液型と直感マークは、今回は星座占いの文章には一切使わないでください。
+- 下記の数値と候補を材料として使ってください。
+- 「今日の運勢」の文章では、血液型と直感マークを直接説明しないでください。
 - 結果文章の中で選択した星座名を直接書かないでください。
+- ラッキーカラーは提示された3候補から必ず1つ選んでください。
+- ラッキーアイテムも提示された3候補から必ず1つ選んでください。
+- 3候補は血液型の基本傾向80%・逆傾向20%を反映して、すでに作られています。再計算は不要です。
+- 最終選択では直感マークの傾向を参考にして3候補から1つ選んでください。
+- 直感マークは結果文章では説明せず、ラッキーの選択にだけ内部的に使ってください。
 - 「占星術では〜」などの説明も不要です。
 - 占いとして楽しく読める文章にしてください。
 - 1〜2文、70〜100文字程度の自然な日本語にしてください。
@@ -232,19 +307,35 @@ export default async function handler(req, res) {
 内部運勢傾向：${sky.tendency}
 内部運勢スコア：${sky.skyScore}
 
+血液型：${bloodType}
+直感マーク：${mark}
+直感マークの選択傾向：${markTraits.join("・")}
+
+今日のラッキーカラー5候補：
+${lucky.colors.map(x => x.name).join("、")}
+血液型で3候補に絞ったラッキーカラー：
+${lucky.colorNarrowed.candidates.map(x => x.name).join("、")}
+血液型の絞り込み：${lucky.colorNarrowed.mode}
+
+今日のラッキーアイテム5候補：
+${lucky.items.map(x => x.name).join("、")}
+血液型で3候補に絞ったラッキーアイテム：
+${lucky.itemNarrowed.candidates.map(x => x.name).join("、")}
+血液型の絞り込み：${lucky.itemNarrowed.mode}
+
 出力はJSONオブジェクトだけにしてください。
 Markdownのコードブロックや前後の説明文は付けないでください。
 
 {
   "zodiacFortune": "今日の運勢の文章",
-  "luckyColor": "",
-  "luckyItem": "",
+  "luckyColor": "3候補から選んだ色",
+  "luckyItem": "3候補から選んだアイテム",
   "markGrade": "",
   "totalScore": 0
 }
 
-今回変更するのは zodiacFortune だけです。
-luckyColor、luckyItem、markGrade、totalScore は空欄または0のままにしてください。
+luckyColor と luckyItem は必ず提示された3候補の中から1つずつ選んでください。
+markGrade と totalScore は今回は空欄または0のままにしてください。
 `;
 
   try {
