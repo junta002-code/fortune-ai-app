@@ -526,14 +526,14 @@ export default async function handler(req, res) {
 
     if (error.prepayCreditDepleted) {
       return res.status(402).json({
-        error: "AI占いの利用上限に達しました。",
+        error: "只今、占い限界数に達しました。しばらくしてリトライしてみてください。",
         prepayCreditDepleted: true
       });
     }
 
     if (error.dailyFreeTierQuotaExceeded) {
       return res.status(429).json({
-        error: "本日のAI占い上限に達しました。",
+        error: "只今、占い限界数に達しました。しばらくしてリトライしてみてください。",
         dailyFreeTierQuotaExceeded: true
       });
     }
