@@ -1,0 +1,19 @@
+{
+  "name": "AIトリプル占い",
+  "short_name": "AIトリプル占い",
+  "description": "星座・血液型・直感マークで占うAI占い",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#17142B",
+  "theme_color": "#17142B",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
